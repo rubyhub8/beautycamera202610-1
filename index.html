@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#111111">
+  <title>美顏相機</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="app">
+    <div class="stage">
+      <canvas id="view"></canvas>
+      <video id="video" playsinline muted autoplay hidden></video>
+      <div id="msg" class="msg">點下方按鈕開啟相機</div>
+      <div id="countdown" class="countdown" hidden></div>
+    </div>
+
+    <section class="panel">
+      <div class="sliders">
+        <label>磨皮 <input type="range" id="smooth" min="0" max="100" value="55"></label>
+        <label>美白 <input type="range" id="white" min="0" max="100" value="30"></label>
+        <label>紅潤 <input type="range" id="warm" min="0" max="100" value="20"></label>
+      </div>
+
+      <div class="filters" id="filters"></div>
+
+      <div class="controls">
+        <button id="flip" class="side" title="切換鏡頭">🔄</button>
+        <button id="shutter" class="shutter" aria-label="拍照"></button>
+        <button id="timer" class="side" title="倒數計時">⏱ 0</button>
+      </div>
+    </section>
+  </main>
+
+  <div id="preview" class="preview" hidden>
+    <img id="photo" alt="拍攝結果">
+    <div class="preview-actions">
+      <button id="retake">重拍</button>
+      <button id="share">分享</button>
+      <a id="download" download="beauty.jpg">下載</a>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

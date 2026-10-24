@@ -1,0 +1,40 @@
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; height: 100%; background: #111; color: #fff;
+  font-family: -apple-system, "PingFang TC", "Noto Sans TC", sans-serif; }
+
+.app { display: flex; flex-direction: column; height: 100dvh; max-width: 560px; margin: 0 auto; }
+
+.stage { position: relative; flex: 1; min-height: 0; background: #000;
+  display: flex; align-items: center; justify-content: center; overflow: hidden; }
+#view { max-width: 100%; max-height: 100%; }
+.msg { position: absolute; padding: 12px 18px; background: rgba(0,0,0,.6);
+  border-radius: 12px; text-align: center; max-width: 80%; }
+.msg[hidden] { display: none; }
+.countdown { position: absolute; font-size: 96px; font-weight: 700; text-shadow: 0 2px 12px #000; }
+
+.panel { padding: 10px 14px calc(14px + env(safe-area-inset-bottom)); background: #1a1a1a; }
+
+.sliders { display: grid; gap: 4px; margin-bottom: 8px; }
+.sliders label { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+.sliders input { flex: 1; accent-color: #ff6f91; }
+
+.filters { display: flex; gap: 8px; overflow-x: auto; padding: 4px 0 10px; }
+.filters button { flex: none; padding: 7px 14px; border-radius: 999px; border: 1px solid #444;
+  background: #2a2a2a; color: #fff; font-size: 14px; }
+.filters button.on { background: #ff6f91; border-color: #ff6f91; }
+
+.controls { display: flex; align-items: center; justify-content: space-around; }
+.side { width: 56px; height: 56px; border-radius: 50%; border: 0; background: #2a2a2a;
+  color: #fff; font-size: 15px; }
+.shutter { width: 74px; height: 74px; border-radius: 50%; border: 5px solid #fff;
+  background: #ff6f91; box-shadow: inset 0 0 0 4px #1a1a1a; }
+.shutter:active { transform: scale(.93); }
+
+.preview { position: fixed; inset: 0; background: #000; z-index: 10;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; }
+.preview[hidden] { display: none; }
+.preview img { max-width: 100%; max-height: 78dvh; object-fit: contain; }
+.preview-actions { display: flex; gap: 10px; padding-bottom: env(safe-area-inset-bottom); }
+.preview-actions button, .preview-actions a { padding: 12px 22px; border-radius: 999px; border: 0;
+  background: #2a2a2a; color: #fff; font-size: 16px; text-decoration: none; }
+.preview-actions a { background: #ff6f91; }
