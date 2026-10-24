@@ -284,7 +284,7 @@
   // 把關鍵點轉成 shader 要的變形參數（座標單位＝影像高度）
   function uploadFaceUniforms(W, H) {
     const slim = val("slim"), big = val("eye");
-    const chin = val("chin"), nose = val("nose"), mouthS = val("mouth"), smile = val("smile");
+    const chinAmt = val("chin"), nose = val("nose"), mouthS = val("mouth"), smile = val("smile");
     const nf = Math.min(faces.length, 2);
     const push = new Float32Array(64), eyes = new Float32Array(24), ext = new Float32Array(40), radii = [0, 0];
     let pi = 0, ei = 0, xi = 0;
@@ -325,7 +325,7 @@
       const addX = (C, M) => { ext.set([C[0] / H, C[1] / H, M[0] / H, M[1] / H], xi); xi += 4; };
 
       const cc = P(152);                                           // 下巴：正＝縮短、負＝拉長
-      addX(cc, [cc[0] - ax[0] * chin * 0.10 * fw, cc[1] - ax[1] * chin * 0.10 * fw]);
+      addX(cc, [cc[0] - ax[0] * chinAmt * 0.10 * fw, cc[1] - ax[1] * chinAmt * 0.10 * fw]);
       for (const idx of [129, 358]) {                              // 瘦鼻：鼻翼往鼻樑中軸收
         const C = P(idx), F = axisFoot(C);
         addX(C, [C[0] + (F[0] - C[0]) * 0.35 * nose, C[1] + (F[1] - C[1]) * 0.35 * nose]);
@@ -341,7 +341,7 @@
     gl.uniform2f(u.faceR, radii[0], radii[1]);
     gl.uniform1f(u.pushN, slim > 0 ? nf * 8 : 0);
     gl.uniform1f(u.eyeN, (big > 0 || mouthS !== 0) ? nf * 3 : 0);
-    gl.uniform1f(u.xN, (chin !== 0 || nose > 0 || smile > 0) ? nf * 5 : 0);
+    gl.uniform1f(u.xN, (chinAmt !== 0 || nose > 0 || smile > 0) ? nf * 5 : 0);
     gl.uniform1f(u.maskOn, nf > 0 ? 1 : 0);
     gl.uniform1f(u.eyeBright, val("bright"));
     gl.uniform1f(u.teeth, val("teeth"));
