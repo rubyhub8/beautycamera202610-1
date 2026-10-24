@@ -5,13 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#111111">
   <title>美顏相機</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=6">
 </head>
 <body>
   <main class="app">
     <div class="stage">
       <canvas id="view"></canvas>
       <video id="video" playsinline muted autoplay hidden></video>
+      <div id="grid" class="gridlines" hidden><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      <button id="gridbtn" class="gridbtn" title="九宮格輔助線">▦</button>
       <div id="status" class="status" hidden></div>
       <div id="msg" class="msg">點下方快門按鈕開啟相機</div>
       <div id="countdown" class="countdown" hidden></div>
@@ -21,38 +23,52 @@
       <div class="tabs">
         <button data-tab="skin" class="on">美膚</button>
         <button data-tab="face">五官</button>
-        <button data-tab="shape">臉型</button>
+        <button data-tab="makeup">彩妝</button>
+        <button data-tab="quality">畫質</button>
         <button data-tab="filter">濾鏡</button>
       </div>
 
       <div class="tabpane on" id="tab-skin">
-        <div class="sliders">
+        <div class="sliders two">
           <label><span>磨皮</span><input type="range" id="smooth" min="0" max="100" value="55"></label>
           <label><span>美白</span><input type="range" id="white" min="0" max="100" value="30"></label>
           <label><span>紅潤</span><input type="range" id="warm" min="0" max="100" value="20"></label>
+          <label><span>黑眼圈</span><input type="range" id="dark" min="0" max="100" value="0"></label>
         </div>
       </div>
 
       <div class="tabpane" id="tab-face">
         <div class="sliders two">
           <label><span>大眼</span><input type="range" id="eye" min="0" max="100" value="20"></label>
+          <label><span>嘴型</span><input type="range" id="mouth" min="-100" max="100" value="0"></label>
           <label><span>亮眼</span><input type="range" id="bright" min="0" max="100" value="30"></label>
           <label><span>美牙</span><input type="range" id="teeth" min="0" max="100" value="40"></label>
-          <label><span>唇色</span><input type="range" id="lip" min="0" max="100" value="20"></label>
         </div>
+        <p class="hint">嘴型：右＝放大、左＝縮小</p>
       </div>
 
-      <div class="tabpane" id="tab-shape">
+      <div class="tabpane" id="tab-makeup">
         <div class="sliders two">
-          <label><span>下巴</span><input type="range" id="chin" min="-100" max="100" value="0"></label>
-          <label><span>嘴型</span><input type="range" id="mouth" min="-100" max="100" value="0"></label>
-          <label><span>微笑</span><input type="range" id="smile" min="0" max="100" value="0"></label>
+          <label><span>唇色</span><input type="range" id="lip" min="0" max="100" value="20"></label>
+          <label><span>腮紅</span><input type="range" id="blush" min="0" max="100" value="0"></label>
+          <label><span>立體</span><input type="range" id="hi" min="0" max="100" value="0"></label>
         </div>
-        <p class="hint">下巴：右＝縮短、左＝拉長　嘴型：右＝放大、左＝縮小</p>
+        <p class="hint">立體：在鼻樑、額頭與下巴尖加上自然高光</p>
+      </div>
+
+      <div class="tabpane" id="tab-quality">
+        <div class="sliders two">
+          <label><span>亮度</span><input type="range" id="bri" min="-100" max="100" value="0"></label>
+          <label><span>對比</span><input type="range" id="con" min="-100" max="100" value="0"></label>
+          <label><span>飽和</span><input type="range" id="sat" min="-100" max="100" value="0"></label>
+          <label><span>清晰</span><input type="range" id="sharp" min="0" max="100" value="0"></label>
+          <label><span>暗角</span><input type="range" id="vig" min="0" max="100" value="0"></label>
+        </div>
       </div>
 
       <div class="tabpane" id="tab-filter">
-        <div class="filters" id="filters"></div>
+        <div class="chiprow"><span class="rowlabel">模式</span><div class="filters" id="presets"></div></div>
+        <div class="chiprow"><span class="rowlabel">濾鏡</span><div class="filters" id="filters"></div></div>
       </div>
 
       <div class="controls">
@@ -72,6 +88,6 @@
     </div>
   </div>
 
-  <script src="app.js"></script>
+  <script src="app.js?v=6"></script>
 </body>
 </html>

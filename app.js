@@ -1,14 +1,26 @@
-// 美顏相機 v2：即時美膚 + MediaPipe 人臉關鍵點（瘦臉、大眼、亮眼、美牙、唇色）+ 濾鏡 + 拍照
+// 美顏相機 v4：即時美膚 + MediaPipe 人臉關鍵點 + 彩妝 + 畫質調整 + 濾鏡 + 拍照
 // 所有影像處理都在瀏覽器本機完成，照片不會上傳。
 (() => {
   const $ = (id) => document.getElementById(id);
-  const val = (id) => +$(id).value / 100;
+  const val = (id) => { const el = $(id); return el ? +el.value / 100 : 0; };
   const video = $("video"), canvas = $("view"), msg = $("msg"), statusEl = $("status");
+  const stage = document.querySelector(".stage"), grid = $("grid");
   const gl = canvas.getContext("webgl", { preserveDrawingBuffer: true, premultipliedAlpha: false });
 
-  const FILTERS = ["原圖", "底片", "日系", "冷調", "暖調", "黑白"];
-  const FACE_SLIDERS = ["eye", "bright", "teeth", "lip", "chin", "mouth", "smile"];
+  const FILTERS = ["原圖", "日系", "冷調", "粉嫩", "清透"];
+  // 需要人臉關鍵點的滑桿；全部為 0 時不會跑人臉偵測
+  const FACE_SLIDERS = ["eye", "mouth", "bright", "teeth", "lip", "blush", "dark", "hi"];
   let filterId = 0, facing = "user", stream = null, running = false, timerSec = 0;
+
+  // 一鍵美顏模式：[滑桿值..., 濾鏡編號]
+  const ZERO = { smooth: 0, white: 0, warm: 0, dark: 0, eye: 0, mouth: 0, bright: 0, teeth: 0, lip: 0,
+                 blush: 0, hi: 0, bri: 0, con: 0, sat: 0, sharp: 0, vig: 0 };
+  const PRESETS = {
+    "自然": { filter: 0, v: { ...ZERO, smooth: 35, white: 15, warm: 10, dark: 20, eye: 10, bright: 15, teeth: 20, lip: 10, blush: 8, hi: 10 } },
+    "甜美": { filter: 3, v: { ...ZERO, smooth: 55, white: 35, warm: 25, dark: 30, eye: 20, bright: 30, teeth: 40, lip: 30, blush: 40, hi: 15 } },
+    "清透": { filter: 4, v: { ...ZERO, smooth: 50, white: 45, warm: 5, dark: 40, eye: 15, bright: 35, teeth: 45, lip: 15, blush: 15, hi: 25, sharp: 20 } },
+    "重置": { filter: 0, v: { ...ZERO } },
+  };
 
   // ---------- 狀態提示 ----------
   let lastStatus = null;
@@ -37,32 +49,18 @@
     varying vec2 uv;
     uniform sampler2D tex;
     uniform sampler2D mask;          // R=眼睛 G=口腔內側(牙齒) B=嘴唇外輪廓
+    uniform sampler2D mask2;         // R=腮紅 G=黑眼圈區域 B=立體高光
     uniform vec2 texel;
     uniform float asp, smoothAmt, whiteAmt, warmAmt, filt;
-    uniform float eyeN, xN, maskOn, eyeBright, teethAmt, lipAmt;
-    uniform vec2 faceR;              // 每張臉的下巴/嘴角作用半徑基準
+    uniform float eyeN, maskOn, eyeBright, teethAmt, lipAmt, blushAmt, darkAmt, hiAmt;
+    uniform float briAmt, conAmt, satAmt, sharpAmt, vigAmt;
     uniform vec4 eyeA[6];            // 凸透鏡：(中心xy, 半徑, 強度)，每張臉 = 左眼、右眼、嘴巴
-    uniform vec4 xA[6];              // 下巴/嘴角控制點，每張臉 3 個：下巴、嘴角×2
 
     float luma(vec3 c){ return dot(c, vec3(.299,.587,.114)); }
 
-    // 局部變形（反向對應）：瘦臉＝局部平移，大眼＝凸透鏡
+    // 局部變形（反向對應）：大眼、嘴型＝凸透鏡
     vec2 warp(vec2 uv0){
       vec2 p = vec2(uv0.x * asp, uv0.y);
-      for (int i = 0; i < 6; i++){
-        if (float(i) >= xN) break;
-        vec4 a = xA[i];
-        int jj = (i < 3) ? i : i - 3;
-        float rf = (jj == 0) ? 0.7 : 0.45;                      // 下巴 / 嘴角 的作用半徑比例
-        float r = rf * ((i < 3) ? faceR.x : faceR.y);
-        vec2 d = p - a.xy;
-        float r2 = r * r, d2 = dot(d, d);
-        if (d2 < r2){
-          vec2 m = a.zw - a.xy;
-          float k = (r2 - d2) / (r2 - d2 + dot(m, m));
-          p -= k * k * m;
-        }
-      }
       for (int j = 0; j < 6; j++){
         if (float(j) >= eyeN) break;
         vec4 e = eyeA[j];
@@ -103,39 +101,58 @@
       c = mix(c, blur, k);
       c += (c0 - blur) * 0.25 * k;
 
+      // 清晰度（避開已磨皮的皮膚）
+      if (sharpAmt > 0.0){
+        vec2 o = texel * 1.5;
+        vec3 avg = (texture2D(tex, suv + vec2(o.x, 0.)).rgb + texture2D(tex, suv - vec2(o.x, 0.)).rgb
+                  + texture2D(tex, suv + vec2(0., o.y)).rgb + texture2D(tex, suv - vec2(0., o.y)).rgb) * .25;
+        c += (c0 - avg) * sharpAmt * 1.3 * (1.0 - k);
+      }
+
       // 美白、紅潤
       float y = luma(c);
       c += whiteAmt * 0.18 * (1.0 - y) * (0.4 + skin);
       c += vec3(.06,.01,.015) * warmAmt * skin;
 
-      // 五官細部：亮眼、美牙、唇色
+      // 五官與彩妝（需要人臉）
       if (maskOn > .5){
         vec3 mk = texture2D(mask, suv).rgb;
+        vec3 m2 = texture2D(mask2, suv).rgb;
         float lipM = mk.b * (1.0 - mk.g);
-        c = mix(c, (c - .45) * 1.3 + .54, mk.r * eyeBright);          // 亮眼：提高眼白/瞳孔對比
+        c = mix(c, (c - .45) * 1.3 + .54, mk.r * eyeBright);                 // 亮眼
         float yy = luma(c);
-        float tw = mk.g * teethAmt * smoothstep(.30, .55, yy);         // 美牙：去黃提亮（跳過暗的口腔）
+        float tw = mk.g * teethAmt * smoothstep(.30, .55, yy);                // 美牙
         c = mix(c, mix(vec3(yy), c, .35) * 1.1 + .04, tw);
-        c = mix(c, vec3(.80,.18,.28) * (.45 + yy), lipM * lipAmt * .5); // 唇色
+        c = mix(c, vec3(.80,.18,.28) * (.45 + yy), lipM * lipAmt * .5);       // 唇色
+        c = mix(c, blur * 1.10 + vec3(.03,.02,.01), m2.g * darkAmt * .9);     // 去黑眼圈
+        c = mix(c, c * .85 + vec3(.22,.05,.08), m2.r * blushAmt * .7);        // 腮紅
+        c += m2.b * hiAmt * .16 * vec3(1., .98, .95);                         // 立體高光
       }
 
       // 濾鏡
-      if (filt > .5 && filt < 1.5){
-        c = mix(vec3(luma(c)), c, .85);
-        c = c * vec3(1.06,1.0,.92) + vec3(.03,.02,.0);
-        c = (c - .5) * .92 + .52;
-      } else if (filt < 2.5 && filt > 1.5){
+      if (filt > .5 && filt < 1.5){                 // 日系
         c = (c - .5) * .82 + .58;
         c *= vec3(.97,1.02,1.04);
         c = mix(vec3(luma(c)), c, .9);
-      } else if (filt < 3.5 && filt > 2.5){
+      } else if (filt > 1.5 && filt < 2.5){         // 冷調
         c *= vec3(.92,1.0,1.1);
-      } else if (filt < 4.5 && filt > 3.5){
-        c *= vec3(1.1,1.0,.9);
-      } else if (filt > 4.5){
-        c = vec3(luma(c));
-        c = (c - .5) * 1.1 + .5;
+      } else if (filt > 2.5 && filt < 3.5){         // 粉嫩
+        c = mix(c, vec3(1.0,.82,.88), .12);
+        c = (c - .5) * .9 + .56;
+        c *= vec3(1.03,.98,1.0);
+      } else if (filt > 3.5){                       // 清透
+        c = (c - .5) * .95 + .54;
+        c = mix(vec3(luma(c)), c, 1.1);
+        c *= vec3(.98,1.01,1.03);
       }
+
+      // 畫質：亮度、對比、飽和度、暗角
+      c += briAmt * .25;
+      c = (c - .5) * (1.0 + conAmt * .6) + .5;
+      c = mix(vec3(luma(c)), c, 1.0 + satAmt);
+      float vg = smoothstep(.55, 1.15, length((uv - .5) * 1.45));
+      c *= 1.0 - vg * vigAmt * .6;
+
       gl_FragColor = vec4(clamp(c, 0., 1.), 1.);
     }`;
 
@@ -168,17 +185,20 @@
   }
   const videoTex = makeTexture(0);
   const maskTex = makeTexture(1);
+  const mask2Tex = makeTexture(2);
 
   const U = (n) => gl.getUniformLocation(prog, n);
   const u = {
     mirror: U("mirror"), texel: U("texel"), asp: U("asp"),
     smooth: U("smoothAmt"), white: U("whiteAmt"), warm: U("warmAmt"), filt: U("filt"),
-    eyeN: U("eyeN"), maskOn: U("maskOn"),
+    eyeN: U("eyeN"), maskOn: U("maskOn"), eyeA: U("eyeA"),
     eyeBright: U("eyeBright"), teeth: U("teethAmt"), lip: U("lipAmt"),
-    faceR: U("faceR"), eyeA: U("eyeA"), xA: U("xA"), xN: U("xN"),
+    blush: U("blushAmt"), dark: U("darkAmt"), hi: U("hiAmt"),
+    bri: U("briAmt"), con: U("conAmt"), sat: U("satAmt"), sharp: U("sharpAmt"), vig: U("vigAmt"),
   };
   gl.uniform1i(U("tex"), 0);
   gl.uniform1i(U("mask"), 1);
+  gl.uniform1i(U("mask2"), 2);
 
   // ---------- MediaPipe 人臉關鍵點 ----------
   const MP_VERSION = "0.10.14";
@@ -200,7 +220,7 @@
       setStatus(null);
     } catch (e) {
       console.error(e);
-      setStatus("人臉功能載入失敗（美膚與濾鏡仍可使用）");
+      setStatus("人臉功能載入失敗（美膚、畫質與濾鏡仍可使用）");
     }
   }
 
@@ -231,92 +251,135 @@
     }
   }
 
-  // 臉部輪廓點（MediaPipe 468/478 點網格的索引）
+  // 關鍵點索引（MediaPipe 468/478 點網格）
   const EYE_DEFS = [[468, 33, 133], [473, 362, 263]];         // [虹膜中心, 眼角1, 眼角2]
   const EYE_L = [33,7,163,144,145,153,154,155,133,173,157,158,159,160,161,246];
   const EYE_R = [362,382,381,380,374,373,390,249,263,466,388,387,386,385,384,398];
   const MOUTH_IN = [78,95,88,178,87,14,317,402,318,324,308,415,310,311,312,13,82,81,80,191];
   const LIP_OUT = [61,146,91,181,84,17,314,405,321,375,291,409,270,269,267,0,37,39,40,185];
 
-  // 嘴唇/眼睛/牙齒遮罩（小畫布，拿來當第二張貼圖）
+  // 兩張小畫布當遮罩貼圖。座標單位＝影像像素（用 setTransform 對應到畫布）
   const MS = 384;
-  const maskCanvas = document.createElement("canvas");
-  maskCanvas.width = maskCanvas.height = MS;
-  const mctx = maskCanvas.getContext("2d");
-  function poly(a, idx, color) {
-    mctx.fillStyle = color; mctx.beginPath();
+  const mkCanvas = () => { const c = document.createElement("canvas"); c.width = c.height = MS; return c; };
+  const maskCanvas = mkCanvas(), mask2Canvas = mkCanvas();
+  const mctx = maskCanvas.getContext("2d"), m2ctx = mask2Canvas.getContext("2d");
+
+  function poly(c, a, idx, color, W, H) {
+    c.fillStyle = color; c.beginPath();
     idx.forEach((i, n) => {
-      const x = a[2*i] * MS, y = a[2*i+1] * MS;
-      n ? mctx.lineTo(x, y) : mctx.moveTo(x, y);
+      const x = a[2*i] * W, y = a[2*i+1] * H;
+      n ? c.lineTo(x, y) : c.moveTo(x, y);
     });
-    mctx.closePath(); mctx.fill();
+    c.closePath(); c.fill();
   }
-  function drawMask() {
-    mctx.globalCompositeOperation = "source-over";
-    mctx.fillStyle = "#000"; mctx.fillRect(0, 0, MS, MS);
-    mctx.globalCompositeOperation = "lighter";
-    for (const a of faces) {
-      poly(a, EYE_L, "#f00"); poly(a, EYE_R, "#f00");
-      poly(a, MOUTH_IN, "#0f0"); poly(a, LIP_OUT, "#00f");
+  // 柔邊橢圓（可旋轉），rgb 例如 "255,0,0"
+  function blob(c, cx, cy, rx, ry, rot, rgb, alpha = 1) {
+    c.save();
+    c.translate(cx, cy); c.rotate(rot); c.scale(rx, ry);
+    const g = c.createRadialGradient(0, 0, 0, 0, 0, 1);
+    g.addColorStop(0, `rgba(${rgb},${alpha})`);
+    g.addColorStop(0.5, `rgba(${rgb},${alpha * 0.55})`);
+    g.addColorStop(1, `rgba(${rgb},0)`);
+    c.fillStyle = g; c.beginPath(); c.arc(0, 0, 1, 0, Math.PI * 2); c.fill();
+    c.restore();
+  }
+
+  const dist = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1]);
+  const mid = (p, q) => [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
+  const lerp = (p, q, t) => [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t];
+
+  // 腮紅、黑眼圈、立體高光的位置（跟著臉的傾斜角度旋轉）
+  function drawBlobs(a, W, H) {
+    const P = (i) => [a[2*i] * W, a[2*i+1] * H];
+    const top = P(168), chin = P(152);
+    const len = dist(top, chin) || 1;
+    const ax = [(chin[0] - top[0]) / len, (chin[1] - top[1]) / len];
+    const rot = Math.atan2(ax[1], ax[0]) - Math.PI / 2;
+    const fw = dist(P(234), P(454));
+
+    for (const [i, j] of [[50, 205], [280, 425]]) {               // 腮紅（R）
+      const c = mid(P(i), P(j));
+      blob(m2ctx, c[0], c[1], fw * 0.13, fw * 0.09, rot, "255,0,0");
+    }
+    for (const [lid, c1, c2] of [[145, 33, 133], [374, 362, 263]]) { // 黑眼圈（G）：下眼瞼下方
+      const w = dist(P(c1), P(c2)), l = P(lid);
+      blob(m2ctx, l[0] + ax[0] * w * 0.35, l[1] + ax[1] * w * 0.35, w * 0.65, w * 0.38, rot, "0,255,0");
+    }
+    const nb = lerp(top, P(1), 0.5);                              // 高光（B）：鼻樑、額頭、下巴尖
+    blob(m2ctx, nb[0], nb[1], fw * 0.045, dist(top, P(1)) * 0.5, rot, "0,0,255");
+    const fh = P(151);
+    blob(m2ctx, fh[0], fh[1], fw * 0.14, fw * 0.07, rot, "0,0,255", 0.6);
+    const cp = P(152);
+    blob(m2ctx, cp[0] - ax[0] * fw * 0.06, cp[1] - ax[1] * fw * 0.06, fw * 0.09, fw * 0.05, rot, "0,0,255", 0.6);
+  }
+
+  function drawMask(W, H) {
+    for (const c of [mctx, m2ctx]) {
+      c.setTransform(1, 0, 0, 1, 0, 0);
+      c.globalCompositeOperation = "source-over";
+      c.fillStyle = "#000"; c.fillRect(0, 0, MS, MS);
+      c.globalCompositeOperation = "lighter";
+      c.setTransform(MS / W, 0, 0, MS / H, 0, 0);
+    }
+    for (const a of faces.slice(0, 2)) {
+      poly(mctx, a, EYE_L, "#f00", W, H); poly(mctx, a, EYE_R, "#f00", W, H);
+      poly(mctx, a, MOUTH_IN, "#0f0", W, H); poly(mctx, a, LIP_OUT, "#00f", W, H);
+      drawBlobs(a, W, H);
     }
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, maskTex);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, maskCanvas);
+    gl.activeTexture(gl.TEXTURE2);
+    gl.bindTexture(gl.TEXTURE_2D, mask2Tex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, mask2Canvas);
     gl.activeTexture(gl.TEXTURE0);
   }
 
-  const dist = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1]);
-
-  // 把關鍵點轉成 shader 要的變形參數（座標單位＝影像高度）
+  // 把關鍵點轉成 shader 要的參數（變形座標單位＝影像高度）
   function uploadFaceUniforms(W, H) {
-    const big = val("eye");
-    const chinAmt = val("chin"), mouthS = val("mouth"), smile = val("smile");
+    const big = val("eye"), mouthS = val("mouth");
     const nf = Math.min(faces.length, 2);
-    const eyes = new Float32Array(24), ext = new Float32Array(24), radii = [0, 0];
-    let ei = 0, xi = 0;
+    const eyes = new Float32Array(24);
+    let ei = 0;
 
     for (let f = 0; f < nf; f++) {
       const a = faces[f];
       const P = (i) => [a[2*i] * W, a[2*i+1] * H];
-      const top = P(168), chin = P(152);
-      let ax = [chin[0] - top[0], chin[1] - top[1]];
-      const len = Math.hypot(ax[0], ax[1]) || 1;
-      ax = [ax[0] / len, ax[1] / len];
-      radii[f] = dist(P(234), P(454)) * 0.22 / H;
-
-      for (const [ir, c1, c2] of EYE_DEFS) {
+      for (const [ir, c1, c2] of EYE_DEFS) {                      // 大眼
         const p1 = P(c1), p2 = P(c2);
-        const C = a.length / 2 > ir ? P(ir) : [(p1[0] + p2[0]) / 2, (p1[1] + p2[1]) / 2];
+        const C = a.length / 2 > ir ? P(ir) : mid(p1, p2);
         eyes.set([C[0] / H, C[1] / H, dist(p1, p2) * 0.8 / H, big * 0.5], ei); ei += 4;
       }
-
-      // 嘴型：以嘴巴中心做凸透鏡（正＝放大、負＝縮小）
-      const m1 = P(61), m2 = P(291);
-      eyes.set([(m1[0] + m2[0]) / 2 / H, (m1[1] + m2[1]) / 2 / H, dist(m1, m2) * 0.6 / H, mouthS * 0.3], ei);
-      ei += 4;
-
-      // 下巴、嘴角：每張臉固定 3 個控制點
-      const fw = dist(P(234), P(454));
-      const addX = (C, M) => { ext.set([C[0] / H, C[1] / H, M[0] / H, M[1] / H], xi); xi += 4; };
-
-      const cc = P(152);                                           // 下巴：正＝縮短、負＝拉長
-      addX(cc, [cc[0] - ax[0] * chinAmt * 0.08 * fw, cc[1] - ax[1] * chinAmt * 0.08 * fw]);
-      for (const idx of [61, 291]) {                               // 微笑：嘴角往上提
-        const C = P(idx);
-        addX(C, [C[0] - ax[0] * smile * 0.05 * fw, C[1] - ax[1] * smile * 0.05 * fw]);
-      }
+      const m1 = P(61), m2 = P(291);                              // 嘴型：正＝放大、負＝縮小
+      const mc = mid(m1, m2);
+      eyes.set([mc[0] / H, mc[1] / H, dist(m1, m2) * 0.6 / H, mouthS * 0.3], ei); ei += 4;
     }
     gl.uniform4fv(u.eyeA, eyes);
-    gl.uniform4fv(u.xA, ext);
-    gl.uniform2f(u.faceR, radii[0], radii[1]);
     gl.uniform1f(u.eyeN, (big > 0 || mouthS !== 0) ? nf * 3 : 0);
-    gl.uniform1f(u.xN, (chinAmt !== 0 || smile > 0) ? nf * 3 : 0);
     gl.uniform1f(u.maskOn, nf > 0 ? 1 : 0);
     gl.uniform1f(u.eyeBright, val("bright"));
     gl.uniform1f(u.teeth, val("teeth"));
     gl.uniform1f(u.lip, val("lip"));
-    if (nf > 0) drawMask();
+    gl.uniform1f(u.blush, val("blush"));
+    gl.uniform1f(u.dark, val("dark"));
+    gl.uniform1f(u.hi, val("hi"));
+    if (nf > 0) drawMask(W, H);
   }
+
+  // ---------- 九宮格輔助線 ----------
+  function placeGrid() {
+    const s = stage.getBoundingClientRect(), c = canvas.getBoundingClientRect();
+    Object.assign(grid.style, {
+      left: (c.left - s.left) + "px", top: (c.top - s.top) + "px",
+      width: c.width + "px", height: c.height + "px",
+    });
+  }
+  $("gridbtn").onclick = () => {
+    grid.hidden = !grid.hidden;
+    $("gridbtn").classList.toggle("on", !grid.hidden);
+    if (!grid.hidden) placeGrid();
+  };
+  window.addEventListener("resize", () => { if (!grid.hidden) placeGrid(); });
 
   // ---------- 繪製迴圈 ----------
   function render() {
@@ -325,6 +388,7 @@
       const w = video.videoWidth, h = video.videoHeight;
       if (canvas.width !== w || canvas.height !== h) {
         canvas.width = w; canvas.height = h; gl.viewport(0, 0, w, h);
+        if (!grid.hidden) placeGrid();
       }
       detect();
       gl.activeTexture(gl.TEXTURE0);
@@ -339,6 +403,11 @@
       gl.uniform1f(u.white, val("white"));
       gl.uniform1f(u.warm, val("warm"));
       gl.uniform1f(u.filt, filterId);
+      gl.uniform1f(u.bri, val("bri"));
+      gl.uniform1f(u.con, val("con"));
+      gl.uniform1f(u.sat, val("sat"));
+      gl.uniform1f(u.sharp, val("sharp"));
+      gl.uniform1f(u.vig, val("vig"));
       uploadFaceUniforms(w, h);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
@@ -361,7 +430,10 @@
       msg.hidden = true; running = true; render();
     } catch (e) {
       msg.hidden = false;
-      msg.textContent = "無法開啟相機：請允許相機權限，並確認網址是 https。";
+      const perm = e && ["NotAllowedError", "NotFoundError", "NotReadableError", "SecurityError"].includes(e.name);
+      msg.textContent = perm
+        ? "無法開啟相機：請允許相機權限，並確認網址是 https。"
+        : "程式發生錯誤（" + (e && e.message) + "）。請強制重新整理，並確認所有檔案都已更新。";
       console.error(e);
     }
   }
@@ -370,7 +442,7 @@
     if (stream) stream.getTracks().forEach((t) => t.stop());
   }
 
-  // ---------- 分頁與濾鏡按鈕 ----------
+  // ---------- 分頁、濾鏡與美顏模式 ----------
   document.querySelectorAll(".tabs button").forEach((b) => {
     b.onclick = () => {
       document.querySelectorAll(".tabs button").forEach((x) => x.classList.toggle("on", x === b));
@@ -378,15 +450,26 @@
     };
   });
 
+  function setFilter(i) {
+    filterId = i;
+    [...$("filters").children].forEach((x, n) => x.classList.toggle("on", n === i));
+  }
   FILTERS.forEach((name, i) => {
     const b = document.createElement("button");
-    b.textContent = name; if (i === 0) b.className = "on";
-    b.onclick = () => {
-      filterId = i;
-      [...$("filters").children].forEach((x) => x.classList.remove("on"));
-      b.classList.add("on");
-    };
+    b.textContent = name;
+    b.onclick = () => setFilter(i);
     $("filters").appendChild(b);
+  });
+  setFilter(0);
+
+  Object.entries(PRESETS).forEach(([name, p]) => {
+    const b = document.createElement("button");
+    b.textContent = name;
+    b.onclick = () => {
+      for (const [id, v] of Object.entries(p.v)) { const el = $(id); if (el) el.value = v; }
+      setFilter(p.filter);
+    };
+    $("presets").appendChild(b);
   });
 
   // ---------- 拍照 ----------
