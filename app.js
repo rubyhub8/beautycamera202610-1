@@ -66,7 +66,7 @@
         if (float(i) >= xN) break;
         vec4 a = xA[i];
         int jj = (i < 5) ? i : i - 5;
-        float rf = (jj == 0) ? 0.9 : ((jj < 3) ? 0.4 : 0.35);   // 下巴 / 鼻翼 / 嘴角 的作用半徑比例
+        float rf = (jj == 0) ? 1.2 : ((jj < 3) ? 0.5 : 0.45);   // 下巴 / 鼻翼 / 嘴角 的作用半徑比例
         float r = rf * ((i < 5) ? faceR.x : faceR.y);
         vec2 d = p - a.xy;
         float r2 = r * r, d2 = dot(d, d);
@@ -246,6 +246,7 @@
 
   // 臉部輪廓點（MediaPipe 468/478 點網格的索引）
   const JAW = [132, 58, 172, 150, 361, 288, 397, 379];        // 前4=左下頷，後4=右下頷
+  const JAW_W = [0.3, 0.8, 1.0, 0.6, 0.3, 0.8, 1.0, 0.6];     // 各點權重：靠近耳朵/鬢角的點推得最少，下頷角最多
   const EYE_DEFS = [[468, 33, 133], [473, 362, 263]];         // [虹膜中心, 眼角1, 眼角2]
   const EYE_L = [33,7,163,144,145,153,154,155,133,173,157,158,159,160,161,246];
   const EYE_R = [362,382,381,380,374,373,390,249,263,466,388,387,386,385,384,398];
@@ -296,19 +297,20 @@
       let ax = [chin[0] - top[0], chin[1] - top[1]];
       const len = Math.hypot(ax[0], ax[1]) || 1;
       ax = [ax[0] / len, ax[1] / len];
-      radii[f] = dist(P(234), P(454)) * 0.30 / H;
+      radii[f] = dist(P(234), P(454)) * 0.22 / H;
 
       for (const idx of JAW) {                       // 往臉部中軸線推
         const C = P(idx);
         const along = (C[0] - top[0]) * ax[0] + (C[1] - top[1]) * ax[1];
         const foot = [top[0] + ax[0] * along, top[1] + ax[1] * along];
-        const M = [C[0] + (foot[0] - C[0]) * 0.16 * slim, C[1] + (foot[1] - C[1]) * 0.16 * slim];
+        const wgt = JAW_W[(pi / 4) % 8] * 0.14 * slim;
+        const M = [C[0] + (foot[0] - C[0]) * wgt, C[1] + (foot[1] - C[1]) * wgt];
         push.set([C[0] / H, C[1] / H, M[0] / H, M[1] / H], pi); pi += 4;
       }
       for (const [ir, c1, c2] of EYE_DEFS) {
         const p1 = P(c1), p2 = P(c2);
         const C = a.length / 2 > ir ? P(ir) : [(p1[0] + p2[0]) / 2, (p1[1] + p2[1]) / 2];
-        eyes.set([C[0] / H, C[1] / H, dist(p1, p2) * 0.9 / H, big * 0.5], ei); ei += 4;
+        eyes.set([C[0] / H, C[1] / H, dist(p1, p2) * 0.8 / H, big * 0.5], ei); ei += 4;
       }
 
       // 嘴型：以嘴巴中心做凸透鏡（正＝放大、負＝縮小）
