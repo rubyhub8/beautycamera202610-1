@@ -7,7 +7,7 @@
   const gl = canvas.getContext("webgl", { preserveDrawingBuffer: true, premultipliedAlpha: false });
 
   const FILTERS = ["原圖", "底片", "日系", "冷調", "暖調", "黑白"];
-  const FACE_SLIDERS = ["slim", "eye", "bright", "teeth", "lip"];
+  const FACE_SLIDERS = ["slim", "eye", "bright", "teeth", "lip", "chin", "nose", "mouth", "smile"];
   let filterId = 0, facing = "user", stream = null, running = false, timerSec = 0;
 
   // ---------- 狀態提示 ----------
@@ -39,10 +39,11 @@
     uniform sampler2D mask;          // R=眼睛 G=口腔內側(牙齒) B=嘴唇外輪廓
     uniform vec2 texel;
     uniform float asp, smoothAmt, whiteAmt, warmAmt, filt;
-    uniform float pushN, eyeN, maskOn, eyeBright, teethAmt, lipAmt;
+    uniform float pushN, eyeN, xN, maskOn, eyeBright, teethAmt, lipAmt;
     uniform vec4 pushA[16];          // 瘦臉控制點：(來源xy, 目標xy)，座標單位=影像高度
     uniform vec2 faceR;              // 每張臉的瘦臉作用半徑
-    uniform vec4 eyeA[4];            // 大眼：(中心xy, 半徑, 強度)
+    uniform vec4 eyeA[6];            // 凸透鏡：(中心xy, 半徑, 強度)，每張臉 = 左眼、右眼、嘴巴
+    uniform vec4 xA[10];             // 下巴/鼻翼/嘴角控制點，每張臉 5 個：下巴、鼻翼×2、嘴角×2
 
     float luma(vec3 c){ return dot(c, vec3(.299,.587,.114)); }
 
@@ -61,7 +62,21 @@
           p -= k * k * m;
         }
       }
-      for (int j = 0; j < 4; j++){
+      for (int i = 0; i < 10; i++){
+        if (float(i) >= xN) break;
+        vec4 a = xA[i];
+        int jj = (i < 5) ? i : i - 5;
+        float rf = (jj == 0) ? 0.9 : ((jj < 3) ? 0.4 : 0.35);   // 下巴 / 鼻翼 / 嘴角 的作用半徑比例
+        float r = rf * ((i < 5) ? faceR.x : faceR.y);
+        vec2 d = p - a.xy;
+        float r2 = r * r, d2 = dot(d, d);
+        if (d2 < r2){
+          vec2 m = a.zw - a.xy;
+          float k = (r2 - d2) / (r2 - d2 + dot(m, m));
+          p -= k * k * m;
+        }
+      }
+      for (int j = 0; j < 6; j++){
         if (float(j) >= eyeN) break;
         vec4 e = eyeA[j];
         vec2 d = p - e.xy;
@@ -173,7 +188,7 @@
     smooth: U("smoothAmt"), white: U("whiteAmt"), warm: U("warmAmt"), filt: U("filt"),
     pushN: U("pushN"), eyeN: U("eyeN"), maskOn: U("maskOn"),
     eyeBright: U("eyeBright"), teeth: U("teethAmt"), lip: U("lipAmt"),
-    pushA: U("pushA"), faceR: U("faceR"), eyeA: U("eyeA"),
+    pushA: U("pushA"), faceR: U("faceR"), eyeA: U("eyeA"), xA: U("xA"), xN: U("xN"),
   };
   gl.uniform1i(U("tex"), 0);
   gl.uniform1i(U("mask"), 1);
@@ -205,7 +220,7 @@
   // 平滑後的人臉關鍵點：每張臉是 Float32Array [x0,y0,x1,y1,...]（0~1 正規化）
   let faces = [], lastVT = -1;
   function detect() {
-    const need = FACE_SLIDERS.some((id) => val(id) > 0);
+    const need = FACE_SLIDERS.some((id) => val(id) !== 0);
     if (!need || !landmarker) { faces = []; return; }
     if (video.currentTime === lastVT) return;
     lastVT = video.currentTime;
@@ -269,9 +284,10 @@
   // 把關鍵點轉成 shader 要的變形參數（座標單位＝影像高度）
   function uploadFaceUniforms(W, H) {
     const slim = val("slim"), big = val("eye");
+    const chin = val("chin"), nose = val("nose"), mouthS = val("mouth"), smile = val("smile");
     const nf = Math.min(faces.length, 2);
-    const push = new Float32Array(64), eyes = new Float32Array(16), radii = [0, 0];
-    let pi = 0, ei = 0;
+    const push = new Float32Array(64), eyes = new Float32Array(24), ext = new Float32Array(40), radii = [0, 0];
+    let pi = 0, ei = 0, xi = 0;
 
     for (let f = 0; f < nf; f++) {
       const a = faces[f];
@@ -294,12 +310,38 @@
         const C = a.length / 2 > ir ? P(ir) : [(p1[0] + p2[0]) / 2, (p1[1] + p2[1]) / 2];
         eyes.set([C[0] / H, C[1] / H, dist(p1, p2) * 0.9 / H, big * 0.5], ei); ei += 4;
       }
+
+      // 嘴型：以嘴巴中心做凸透鏡（正＝放大、負＝縮小）
+      const m1 = P(61), m2 = P(291);
+      eyes.set([(m1[0] + m2[0]) / 2 / H, (m1[1] + m2[1]) / 2 / H, dist(m1, m2) * 0.95 / H, mouthS * 0.35], ei);
+      ei += 4;
+
+      // 下巴、鼻翼、嘴角：每張臉固定 5 個控制點
+      const fw = dist(P(234), P(454));
+      const axisFoot = (C) => {
+        const al = (C[0] - top[0]) * ax[0] + (C[1] - top[1]) * ax[1];
+        return [top[0] + ax[0] * al, top[1] + ax[1] * al];
+      };
+      const addX = (C, M) => { ext.set([C[0] / H, C[1] / H, M[0] / H, M[1] / H], xi); xi += 4; };
+
+      const cc = P(152);                                           // 下巴：正＝縮短、負＝拉長
+      addX(cc, [cc[0] - ax[0] * chin * 0.10 * fw, cc[1] - ax[1] * chin * 0.10 * fw]);
+      for (const idx of [129, 358]) {                              // 瘦鼻：鼻翼往鼻樑中軸收
+        const C = P(idx), F = axisFoot(C);
+        addX(C, [C[0] + (F[0] - C[0]) * 0.35 * nose, C[1] + (F[1] - C[1]) * 0.35 * nose]);
+      }
+      for (const idx of [61, 291]) {                               // 微笑：嘴角往上提
+        const C = P(idx);
+        addX(C, [C[0] - ax[0] * smile * 0.05 * fw, C[1] - ax[1] * smile * 0.05 * fw]);
+      }
     }
     gl.uniform4fv(u.pushA, push);
     gl.uniform4fv(u.eyeA, eyes);
+    gl.uniform4fv(u.xA, ext);
     gl.uniform2f(u.faceR, radii[0], radii[1]);
     gl.uniform1f(u.pushN, slim > 0 ? nf * 8 : 0);
-    gl.uniform1f(u.eyeN, big > 0 ? nf * 2 : 0);
+    gl.uniform1f(u.eyeN, (big > 0 || mouthS !== 0) ? nf * 3 : 0);
+    gl.uniform1f(u.xN, (chin !== 0 || nose > 0 || smile > 0) ? nf * 5 : 0);
     gl.uniform1f(u.maskOn, nf > 0 ? 1 : 0);
     gl.uniform1f(u.eyeBright, val("bright"));
     gl.uniform1f(u.teeth, val("teeth"));
@@ -331,7 +373,7 @@
       uploadFaceUniforms(w, h);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
-      if (landmarker && FACE_SLIDERS.some((id) => val(id) > 0))
+      if (landmarker && FACE_SLIDERS.some((id) => val(id) !== 0))
         setStatus(faces.length ? null : "未偵測到人臉");
       else if (landmarker) setStatus(null);
     }

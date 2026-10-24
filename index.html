@@ -21,6 +21,7 @@
       <div class="tabs">
         <button data-tab="skin" class="on">美膚</button>
         <button data-tab="face">五官</button>
+        <button data-tab="shape">臉型</button>
         <button data-tab="filter">濾鏡</button>
       </div>
 
@@ -40,6 +41,16 @@
           <label><span>美牙</span><input type="range" id="teeth" min="0" max="100" value="40"></label>
           <label><span>唇色</span><input type="range" id="lip" min="0" max="100" value="20"></label>
         </div>
+      </div>
+
+      <div class="tabpane" id="tab-shape">
+        <div class="sliders two">
+          <label><span>下巴</span><input type="range" id="chin" min="-100" max="100" value="0"></label>
+          <label><span>瘦鼻</span><input type="range" id="nose" min="0" max="100" value="0"></label>
+          <label><span>嘴型</span><input type="range" id="mouth" min="-100" max="100" value="0"></label>
+          <label><span>微笑</span><input type="range" id="smile" min="0" max="100" value="0"></label>
+        </div>
+        <p class="hint">下巴：右＝縮短、左＝拉長　嘴型：右＝放大、左＝縮小</p>
       </div>
 
       <div class="tabpane" id="tab-filter">
