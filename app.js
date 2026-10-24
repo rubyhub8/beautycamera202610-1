@@ -66,7 +66,7 @@
         if (float(i) >= xN) break;
         vec4 a = xA[i];
         int jj = (i < 5) ? i : i - 5;
-        float rf = (jj == 0) ? 1.2 : ((jj < 3) ? 0.5 : 0.45);   // 下巴 / 鼻翼 / 嘴角 的作用半徑比例
+        float rf = (jj == 0) ? 0.7 : ((jj < 3) ? 0.5 : 0.45);   // 下巴 / 鼻翼 / 嘴角 的作用半徑比例
         float r = rf * ((i < 5) ? faceR.x : faceR.y);
         vec2 d = p - a.xy;
         float r2 = r * r, d2 = dot(d, d);
@@ -315,7 +315,7 @@
 
       // 嘴型：以嘴巴中心做凸透鏡（正＝放大、負＝縮小）
       const m1 = P(61), m2 = P(291);
-      eyes.set([(m1[0] + m2[0]) / 2 / H, (m1[1] + m2[1]) / 2 / H, dist(m1, m2) * 0.95 / H, mouthS * 0.35], ei);
+      eyes.set([(m1[0] + m2[0]) / 2 / H, (m1[1] + m2[1]) / 2 / H, dist(m1, m2) * 0.6 / H, mouthS * 0.3], ei);
       ei += 4;
 
       // 下巴、鼻翼、嘴角：每張臉固定 5 個控制點
@@ -327,7 +327,7 @@
       const addX = (C, M) => { ext.set([C[0] / H, C[1] / H, M[0] / H, M[1] / H], xi); xi += 4; };
 
       const cc = P(152);                                           // 下巴：正＝縮短、負＝拉長
-      addX(cc, [cc[0] - ax[0] * chinAmt * 0.10 * fw, cc[1] - ax[1] * chinAmt * 0.10 * fw]);
+      addX(cc, [cc[0] - ax[0] * chinAmt * 0.08 * fw, cc[1] - ax[1] * chinAmt * 0.08 * fw]);
       for (const idx of [129, 358]) {                              // 瘦鼻：鼻翼往鼻樑中軸收
         const C = P(idx), F = axisFoot(C);
         addX(C, [C[0] + (F[0] - C[0]) * 0.35 * nose, C[1] + (F[1] - C[1]) * 0.35 * nose]);
