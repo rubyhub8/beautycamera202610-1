@@ -12,18 +12,39 @@
     <div class="stage">
       <canvas id="view"></canvas>
       <video id="video" playsinline muted autoplay hidden></video>
-      <div id="msg" class="msg">點下方按鈕開啟相機</div>
+      <div id="status" class="status" hidden></div>
+      <div id="msg" class="msg">點下方快門按鈕開啟相機</div>
       <div id="countdown" class="countdown" hidden></div>
     </div>
 
     <section class="panel">
-      <div class="sliders">
-        <label>磨皮 <input type="range" id="smooth" min="0" max="100" value="55"></label>
-        <label>美白 <input type="range" id="white" min="0" max="100" value="30"></label>
-        <label>紅潤 <input type="range" id="warm" min="0" max="100" value="20"></label>
+      <div class="tabs">
+        <button data-tab="skin" class="on">美膚</button>
+        <button data-tab="face">五官</button>
+        <button data-tab="filter">濾鏡</button>
       </div>
 
-      <div class="filters" id="filters"></div>
+      <div class="tabpane on" id="tab-skin">
+        <div class="sliders">
+          <label><span>磨皮</span><input type="range" id="smooth" min="0" max="100" value="55"></label>
+          <label><span>美白</span><input type="range" id="white" min="0" max="100" value="30"></label>
+          <label><span>紅潤</span><input type="range" id="warm" min="0" max="100" value="20"></label>
+        </div>
+      </div>
+
+      <div class="tabpane" id="tab-face">
+        <div class="sliders two">
+          <label><span>瘦臉</span><input type="range" id="slim" min="0" max="100" value="30"></label>
+          <label><span>大眼</span><input type="range" id="eye" min="0" max="100" value="25"></label>
+          <label><span>亮眼</span><input type="range" id="bright" min="0" max="100" value="30"></label>
+          <label><span>美牙</span><input type="range" id="teeth" min="0" max="100" value="40"></label>
+          <label><span>唇色</span><input type="range" id="lip" min="0" max="100" value="20"></label>
+        </div>
+      </div>
+
+      <div class="tabpane" id="tab-filter">
+        <div class="filters" id="filters"></div>
+      </div>
 
       <div class="controls">
         <button id="flip" class="side" title="切換鏡頭">🔄</button>

@@ -1,21 +1,31 @@
 # 美顏相機
 
-純網頁版美顏相機，所有處理都在瀏覽器本機完成，照片不會上傳。
+純網頁版美顏相機。影像處理全部在瀏覽器本機完成，拍攝的照片不會上傳到任何伺服器。
 
-## 功能（v1）
-- 即時預覽：磨皮、美白、紅潤（可用滑桿調整強度）
-- 6 種濾鏡：原圖、底片、日系、冷調、暖調、黑白
+## 功能（v2）
+- **美膚**：磨皮（只作用在膚色區域）、美白、紅潤
+- **五官**（MediaPipe 人臉關鍵點，最多 2 張臉）：瘦臉、大眼、亮眼、美牙、唇色
+- **濾鏡**：原圖、底片、日系、冷調、暖調、黑白
 - 前後鏡頭切換、倒數計時（3／5／10 秒）
 - 拍照後預覽、下載、分享
 
 ## 部署到 GitHub Pages
 1. 在 GitHub 建立新儲存庫（例如 `beauty-camera`），設為 Public
 2. 把 `index.html`、`style.css`、`app.js`、`README.md` 上傳到儲存庫根目錄
-3. 進入 Settings → Pages → Source 選 `Deploy from a branch`，Branch 選 `main`、資料夾 `/ (root)`，按 Save
+3. Settings → Pages → Source 選 `Deploy from a branch`，Branch 選 `main`、資料夾 `/ (root)`，按 Save
 4. 約一分鐘後，網址會是 `https://你的帳號.github.io/beauty-camera/`
 
-> 相機功能需要 https，GitHub Pages 預設就是 https，可以直接使用。
+> 相機功能需要 https，GitHub Pages 預設就是 https。
+
+## 關於外部資源
+人臉偵測的程式庫（jsDelivr）與模型檔（Google Storage）會在開啟網頁時從網路下載，約數 MB，之後瀏覽器會快取。
+下載的只是模型，你的相機畫面與照片仍然只在本機處理。
+
+## 調整建議
+- 瘦臉強度：`app.js` 中 `uploadFaceUniforms` 裡的 `0.16`（越大瘦得越多）
+- 大眼範圍：同一處的 `* 0.9`（眼睛作用半徑）
+- 磨皮質感：shader 裡的 `90.0`（越小越平滑）與 `0.25`（找回的細節量）
 
 ## 下一步計畫
-- 接入 MediaPipe 人臉關鍵點：瘦臉、大眼、亮眼、美牙
-- PWA：安裝到主畫面、離線使用
+- PWA：安裝到主畫面、離線使用（需把模型檔放進專案）
+- 下巴／鼻子／嘴型微調、髮色更換
